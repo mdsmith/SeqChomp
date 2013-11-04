@@ -8,8 +8,18 @@ import re
 def head_fix(header, length):
     new_header = []
     for line in header:
-        if re.search("DIMENSIONS NCHAR", line) != None:
-            new_header.append("DIMENSIONS NCHAR = " + str(length) + ";\n")
+        if re.search("DIMENSIONS", line.upper()) != None:
+            nchar_start = re.search("NCHAR", line.upper()).start()
+            pre = line[:nchar_start]
+            tail = line[nchar_start:]
+            post = tail.split('=')[1:]
+            post = post[0].split()[1:] + post[1:]
+            new_header.append(pre)
+            new_header.append("NCHAR = " + str(length))
+            new_header.append(" ".join(post))
+            if len(post) == 0:
+                new_header.append(";")
+            new_header.append("\n")
         else:
             new_header.append(line)
     return new_header
@@ -27,22 +37,26 @@ def chunk(input_file):
     for line in lines:
         if not matrix and not footer:
             header.append(line)
-            if re.search("MATRIX", line) != None:
+            if re.search("MATRIX", line) != None or re.search("Matrix",
+            line) != None:
                 matrix = True
         elif matrix:
-            if line[:5] == "END;":
+            if (re.search("END;", line) != None or
+                re.search("End;", line) != None):
                 matrix = False
                 in_footer = True
                 footer.append(line)
             else:
-                pre_seqs.append(line)
+                if len(line.strip()) != 0 and line.strip()[0] != ";":
+                    if list(line.strip())[0] != "[":
+                        pre_seqs.append(line)
         else:
             footer.append(line)
     seqs = {}
     for seq in pre_seqs:
         key, value = seq.split()
         seqs[key] = value
-    return (header, seqs, footer)
+    return header, seqs, footer
 
 def make_lines(seq_dict):
     seqs = []
@@ -69,7 +83,7 @@ def chomp(input_file, output_directory, length, suffix):
     # seqs = a dictionary of seqs by leaf name
     # footer = anything at the bottom of the file to be written out
     header, seqs, footer = chunk(input_file)
-    if len(seqs.items()) == 0:
+    if len(seqs) == 0:
         print("File skipped: " + input_file)
         return
     else:
@@ -109,7 +123,4 @@ if __name__ == "__main__":
 
     file_list = get_files(args.input)
     for file in file_list:
-        try:
-            chomp(file, args.output, args.length, args.suffix)
-        except ValueError:
-            print("File skipped: " + file)
+        chomp(file, args.output, args.length, args.suffix)
